@@ -1,0 +1,15 @@
+---
+networks:
+  clash-net:
+    name: clash-net
+    driver: bridge
+
+services:
+  clash-giveaway-api:
+    build: .
+    container_name: giveaway-api
+    restart: always
+    networks: 
+      - clash-net
+    ports:
+      - 9050:8000

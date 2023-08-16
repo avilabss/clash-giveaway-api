@@ -2,9 +2,11 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -53,50 +55,72 @@ func (server *Server) getEligibleMembers(clanTag string) (*[]Member, error) {
 	return &eligibleMembers, nil
 }
 
+func (server *Server) checkMemberEligibilityBasedOnAttacks(member Member, ch chan<- Member, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var eligibleAttacks []chocolateclashgoapi.Attack
+	var isEligible bool = true
+
+	api, err := chocolateclashgoapi.Init(chocolateclashgoapi.FWALeague)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	ccMember, err := api.GetMember(member.Tag, 0, 20, true)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	for x := 0; x < len(ccMember.Attacks); x++ {
+		fullTimeStr := fmt.Sprintf("%s %s", ccMember.Attacks[x].Timestamp, "00:00:00")
+		fullTime, _ := time.Parse("2006-01-02 15:04:05", fullTimeStr)
+
+		nowTime := time.Now().UTC()
+		xDaysBefore := nowTime.AddDate(0, 0, -30)
+
+		if fullTime.After(xDaysBefore) {
+			eligibleAttacks = append(eligibleAttacks, ccMember.Attacks[x])
+		}
+	}
+
+	for x := 0; x < len(eligibleAttacks); x++ {
+		color := *eligibleAttacks[x].Color
+
+		if color == "purple" || color == "red" {
+			isEligible = false
+			break
+		}
+	}
+
+	if isEligible {
+		newMember := Member{
+			Name: member.Name,
+			Tag:  member.Tag,
+		}
+
+		ch <- newMember
+	}
+}
+
 func (server *Server) filterEligibleMembersBasedOnAttacks(eligibleMembers []Member) (*[]Member, error) {
 	var newEligibleMembers []Member
+	var wg sync.WaitGroup
+	resultsChannel := make(chan Member)
 
 	for x := 0; x < len(eligibleMembers); x++ {
-		api, err := chocolateclashgoapi.Init(chocolateclashgoapi.FWALeague)
+		wg.Add(1)
+		go server.checkMemberEligibilityBasedOnAttacks(eligibleMembers[x], resultsChannel, &wg)
+	}
 
-		if err != nil {
-			return nil, err
-		}
+	wg.Wait()
+	close(resultsChannel)
 
-		member, err := api.GetMember(eligibleMembers[x].Tag, 0, 20, true)
-
-		if err != nil {
-			return nil, err
-		}
-
-		var eligibleAttacks []chocolateclashgoapi.Attack
-
-		for x := 0; x < len(member.Attacks); x++ {
-			fullTimeStr := fmt.Sprintf("%s %s", member.Attacks[x].Timestamp, "00:00:00")
-			fullTime, _ := time.Parse("2006-01-02 15:04:05", fullTimeStr)
-
-			nowTime := time.Now().UTC()
-			xDaysBefore := nowTime.AddDate(0, 0, -30)
-
-			if fullTime.After(xDaysBefore) {
-				eligibleAttacks = append(eligibleAttacks, member.Attacks[x])
-			}
-		}
-
-		isEligible := true
-
-		for x := 0; x < len(eligibleAttacks); x++ {
-			color := *eligibleAttacks[x].Color
-
-			if color == "purple" || color == "red" {
-				isEligible = false
-				break
-			}
-		}
-
-		if isEligible {
-			newEligibleMembers = append(newEligibleMembers, eligibleMembers[x])
-		}
+	for em := range resultsChannel {
+		newEligibleMembers = append(newEligibleMembers, em)
 	}
 
 	return &newEligibleMembers, nil

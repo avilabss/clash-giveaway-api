@@ -136,12 +136,13 @@ func (server *Server) GetEligibleMembers(c *gin.Context) {
 	}
 
 	eligibleMembersPointer, err := server.getEligibleMembers(clanTag)
-	eligibleMembers := *eligibleMembersPointer
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Status: http.StatusInternalServerError, Message: ERROR, Data: fmt.Sprintf("%s: %s", ErrFailedToGetEligibleMembers.Error(), err)})
 		return
 	}
+
+	eligibleMembers := *eligibleMembersPointer
 
 	if strings.ToLower(verifyAttacks) == "true" {
 		eligibleMembersPointer, err = server.filterEligibleMembersBasedOnAttacks(eligibleMembers)
@@ -189,12 +190,13 @@ func (server *Server) GetWinner(c *gin.Context) {
 	}
 
 	eligibleMembersPointer, err := server.getEligibleMembers(clanTag)
-	eligibleMembers := *eligibleMembersPointer
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, Response{Status: http.StatusInternalServerError, Message: ERROR, Data: fmt.Sprintf("%s: %s", ErrFailedToGetEligibleMembers.Error(), err)})
 		return
 	}
+
+	eligibleMembers := *eligibleMembersPointer
 
 	if strings.ToLower(verifyAttacks) == "true" {
 		eligibleMembersPointer, err = server.filterEligibleMembersBasedOnAttacks(eligibleMembers)
